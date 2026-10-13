@@ -153,27 +153,6 @@ PIKMI_HEARTS = ["❤️", "🧡", "💛", "💚", "💙", "💜", "🩷", "🩵"
 
 PIKMI_EMOJI_MIX = ["🥺", "👉👈", "uwu", "owo", ">_<", "^_^", "~_~", "☆", "★", "♪", "♫"]
 
-# --- новые добавки (старые списки не тронуты, только расширены) ---
-PIKMI_ADDONS += [
-    " ~мур", " ~мяу", " ~чмок", " ~обнимашки", " ~хихи", " ~сахарок", " ~конфетка",
-    " ~булочка", " ~малышка", " ~лапочка", " ~зефирка", " ~пирожочек", " ~котик",
-    " (≧◡≦)", " (◕‿◕)", " (つ≧▽≦)つ", " (｡♥‿♥｡)", " ʕ•ᴥ•ʔ", " (=^･ω･^=)",
-    " ฅ^•ﻌ•^ฅ", " ( ˘ ³˘)♥", " (づ｡◕‿‿◕｡)づ", " (｡•́︿•̀｡)",
-    " 🍓", " 🧸", " 🍭", " 🦋", " 🌷", " 🫶", " 🥰", " 😽", " 🍑", " 🐰", " 🩰", " 🧁",
-    " (я такая милая)", " (не бей, я пикми)", " (я не как все девочки)",
-    " ✧･ﾟ: *✧･ﾟ:*", " ⋆˚✿˖°", " ₊˚⊹♡", " ᓚᘏᗢ", " ꒰ᐢ. .ᐢ꒱",
-]
-
-PIKMI_PREFIXES += [
-    "мур~ ", "хихи~ ", "уваа~ ", "ой~ ", "ахх~ ", "аууу~ ", "ня-ня~ ", "🧸 ", "🍓 ",
-    "🦋 ", "🫶 ", "🥰 ", "🍭 ", "🐰 ", "ʕ•ᴥ•ʔ ", "(≧◡≦) ", "малыш~ ", "котик~ ",
-]
-
-PIKMI_EMOJI_MIX += [
-    "(⁄ ⁄>⁄ ▽ ⁄<⁄ ⁄)", "(˘▾˘)~♪", "(｡>﹏<｡)", "(´｡• ᵕ •｡`)", "(* ^ ω ^)",
-    "(๑˃ᴗ˂)ﻭ", "(๑>◡<๑)", "٩(◕‿◕｡)۶", "°˖✧◝(⁰▿⁰)◜✧˖°", "😳", "🥹", "🤭",
-]
-
 def pikmi_add_to_text(original_text: str) -> str:
     result = original_text
     words = result.split()
@@ -255,52 +234,6 @@ ITALIAN_WORDS_REPLACE = {
     "нет": "No dolcezza... 💔",
 }
 
-# --- новые добавки ---
-ITALIAN_PREFIXES += [
-    "Mamma mia~ ", "Madonna~ ", "Ragazzi~ ", "Amico mio~ ", "Bellissimo~ ", "Caro mio~ ",
-    "Che bella giornata~ ", "Buongiorno~ ", "Mio caro~ ", "Capisci~ ", "Allora~ ",
-    "Ecco~ ", "Dai dai~ ", "Forza~ ", "🍷 ", "🛵 ", "🎻 ", "🍋 ", "🍨 ", "🏛️ ", "⚽ ",
-]
-
-ITALIAN_SUFFIXES += [
-    " ~mamma mia", " ~che bello", " ~andiamo", " ~dai", " ~bravissimo", " ~capito",
-    " ~amico mio", " ~a presto", " ~buonanotte", " ~salute", " ~che passione",
-    " ~bella vita", " ~dolce vita", " ~pronto", " ~magnifico", " ~ma dai",
-]
-
-ITALIAN_PHRASES += [
-    " Che meraviglia! 🍋", " Dolce vita! 🍷", " Mamma mia, che giornata! 🛵",
-    " Buon appetito! 🍝", " Salute! 🍷", " Andiamo, amore! 🛵", " Magnifico! 🎻",
-    " Forza Italia! ⚽", " Basta pasta, ma no! 🍝", " Che cosa dici?! 🤌",
-    " Spettacolare! 🏛️", " Come stai, bella? 🌹", " Ti voglio bene! 💕",
-    " Mi piace tantissimo! 🍨", " Roma, Venezia, amore! 🇮🇹", " Fantastico! 🎻",
-]
-
-ITALIAN_GESTURES += [
-    " 🍷🤌", " 🛵💨", " 🎻🇮🇹", " 🍋🤌", " 🍨💋", " 🏛️🇮🇹", " ⚽🇮🇹", " 🌹🍷",
-    " 🤌🤌", " 🤌🍝🤌", " 🛵🌹", " 🍕🍷",
-]
-
-for _k, _v in {
-    "добрый день": "Buon pomeriggio, bella! ☀️🇮🇹",
-    "доброе утро": "Buongiorno amore mio! ☕🌹",
-    "добрый вечер": "Buonasera, tesoro! 🍷✨",
-    "спокойной ночи": "Buonanotte, dolcezza... 🌙💋",
-    "пожалуйста": "Prego, amore! 🤌",
-    "извини": "Scusami, tesoro mio! 🥺🌹",
-    "отлично": "Ottimo! Perfetto! 🤌🇮🇹",
-    "класс": "Che bello, fantastico! 🎻✨",
-    "круто": "Fantastico, amico mio! 🍕🤌",
-    "красивая": "Bellissima, come il tramonto a Roma! 🌅💋",
-    "красивый": "Bellissimo, come un David! 🏛️🤌",
-    "еда": "Mangiamo! Pasta, pizza, amore! 🍝🍕",
-    "кофе": "Un espresso, per favore! ☕🇮🇹",
-    "скучаю": "Mi manchi tantissimo, cuore mio... 💔🌹",
-    "давай": "Andiamo, dai dai! 🛵🇮🇹",
-    "ладно": "Va bene, tesoro! 🤌",
-}.items():
-    ITALIAN_WORDS_REPLACE.setdefault(_k, _v)
-
 def italian_add_to_text(original_text: str) -> str:
     text_lower = original_text.lower()
     result = original_text
@@ -368,47 +301,6 @@ EMO_WORDS_REPLACE = {
     "да": "да... наверное... хотя какая разница... 🖤",
     "нет": "нет... никогда... все бессмысленно... 💔",
 }
-
-# --- новые добавки ---
-EMO_PREFIXES += [
-    "Дождь за окном, как и в душе... ", "Опять бессонная ночь... ", "Мир такой серый... ",
-    "Я растворяюсь в тишине... ", "Только ты и тени... ", "Холодно... внутри... ",
-    "Закрыв глаза в темноте... ", "Мои шрамы не видны... ", "Пепел и пустота... ",
-    "Чёрные розы увядают... ", "Лунный свет не греет... ", "Кому я вообще нужен... ",
-    "Мои мысли тонут... ", "Нет света в конце туннеля... ", "Тишина кричит... ",
-]
-
-EMO_SUFFIXES += [
-    " ...и дождь стучит по стеклу", " ...я так устал", " ...мир потерял краски",
-    " ...пепел вместо сердца", " ...тишина громче крика", " ...лишь тени рядом",
-    " ...где-то во тьме", " ...догорающая свеча", " ...пока луна не смотрит",
-    " ...чёрное на чёрном", " ...меня никто не слышит", " ...осень в душе навсегда",
-    " ...пусть всё сгорит", " ...игнорируйте меня", " ...я исчезаю",
-]
-
-EMO_PHRASES += [
-    " 🖤🖤🖤", " ⛓️", " 🔪🥀", " 🦇", " 🪦", " 🥀🌑", " 💀", " 🌧️", " 🩸", " 🕯️",
-    " ʏ ʜ ᴇ ʙ ᴏ ᴍ ᴏ ɢ ᴜ", " мЕнЯ нИкТо нЕ пОнИмАеТ...", " чЁрНоЕ нА чЁрНоМ...",
-    " ⋆˙⟡ тьма ⟡˙⋆", " ✖_✖", " (︶︹︺)", " (╥﹏╥)", " (ಥ﹏ಥ)", " (T_T)",
-    " чёрные розы для меня", " моя душа в трауре",
-]
-
-for _k, _v in {
-    "добрый": "добрый? в этом мире нет добра... 🌑",
-    "здравствуй": "здравствуй... если тьма тебя не пугает... 🖤",
-    "счастлив": "счастье — иллюзия, как и всё вокруг... 🥀",
-    "весело": "веселье... маска, за которой пустота... 🕷️",
-    "скучно": "скучно... вечность пустоты тянется... 🕯️",
-    "устал": "я устал от этого мира... 🌧️",
-    "дождь": "дождь... хоть кто-то плачет вместе со мной... 🌧️🖤",
-    "ночь": "ночь — единственное, что меня понимает... 🌙🖤",
-    "друг": "друзья... они все уходят... 💔",
-    "ладно": "ладно... всё равно ничего не изменится... 🥀",
-    "пожалуйста": "пожалуйста... не оставляй меня во тьме... 🕯️",
-    "извини": "извини... я не создан для этого мира... 🖤",
-    "ха": "ха... смех мёртвый, как мои мечты... 💀",
-}.items():
-    EMO_WORDS_REPLACE.setdefault(_k, _v)
 
 def emo_add_to_text(original_text: str) -> str:
     text_lower = original_text.lower()
@@ -484,50 +376,6 @@ GENTLEMAN_WORDS_REPLACE = {
     "отлично": "Браво! Пальму первенства вам вручаю! 🏛️",
     "извини": "Помилуйте, вину свою признаю и прощения прошу! 🧐",
 }
-
-# --- новые добавки ---
-GENTLEMAN_PREFIXES += [
-    "Милостивая государыня, ", "Многоуважаемый, ", "Достопочтенный, ", "Ваше степенство, ",
-    "Не угодно ли, ", "Дозвольте заметить, ", "Соблаговолите внять, ", "С вашего позволения, ",
-    "Господа, ", "Смею предположить, ", "Как человек чести, ", "Положа руку на сердце, ",
-    "Не откажите в любезности, ", "Припадаю к стопам, ", "Моё почтение, ",
-    "🥂 ", "🕯️ ", "🪶 ", "🎻 ", "🍷 ", "🕰️ ", "🏰 ",
-]
-
-GENTLEMAN_SUFFIXES += [
-    " ...со всем моим почтением", " ...остаюсь вашим покорнейшим слугой", " ...уповаю на вашу снисходительность",
-    " ...как подобает джентльмену", " ...слово дворянина", " ...да хранит вас Провидение",
-    " ...не извольте гневаться", " ...ежели на то будет ваша воля", " ...и вся недолга, сударь",
-    " ...честь имею кланяться", " ...с неизменной учтивостью", " ...да будет так",
-]
-
-GENTLEMAN_PHRASES += [
-    " Какая учтивость! 🥂", " Благодарствую от всей души! 🪶", " Ваше здоровье! 🍷",
-    " Позвольте поклониться! 🎩", " Достойнейше! 🏰", " Сие весьма похвально! 📜",
-    " Мои глубочайшие почтения! 🕯️", " Изумительно, не правда ли? 🧐",
-    " Как говаривал мой батюшка... 🕰️", " Вот это по-нашему, по-дворянски! ⚜️",
-    " Не извольте беспокоиться! 🎻", " Вечер добрый, господа! 🥂",
-]
-
-for _k, _v in {
-    "добрый день": "Добрый день, милостивый государь! Рад видеть вас в добром здравии! 🎩",
-    "доброе утро": "Доброго утра, сударь! Да будет день ваш благословенен! 🕯️",
-    "добрый вечер": "Добрый вечер вам, достопочтенный! Не угодно ли бокал вина? 🍷",
-    "спокойной ночи": "Почивайте с миром, сударь, покойной вам ночи! 🕰️",
-    "извините": "Покорнейше прошу простить мою неучтивость! 🧐",
-    "прости": "Падаю в ноги, прошу милостиво простить! 🎩",
-    "круто": "Сие поистине великолепно, государь мой! 🥂",
-    "класс": "Восхитительно! Рукоплещу вам! 🏛️",
-    "ладно": "Извольте, я согласен, сударь! 📜",
-    "ок": "Как вам будет угодно, милостивый государь! 🎩",
-    "конечно": "Разумеется, сударь, без малейшего сомнения! ⚜️",
-    "согласен": "Всецело разделяю ваше мнение, сударь! 🧐",
-    "еда": "Не угодно ли отобедать, милостивый государь? 🍷🪶",
-    "деньги": "Звонкая монета — предмет щекотливый, сударь... 💼",
-    "работа": "Служба — долг дворянина, сударь! 💼🎩",
-    "друг": "Вы мне — как брат, милостивый государь! 🥂",
-}.items():
-    GENTLEMAN_WORDS_REPLACE.setdefault(_k, _v)
 
 def gentleman_add_to_text(original_text: str) -> str:
     """Добавляет джентльменские/аристократические эффекты к тексту"""
@@ -740,32 +588,139 @@ def run_spam(chat_id: int, biz_id: str, text: str, count: int, stop_event: threa
 
 # ── .info ─────────────────────────────────────────────────────────
 
-def get_user_info_text(target_id: int) -> str:
-    url = f"https://api.telegram.org/bot{TOKEN}/getChat"
-    r = requests.post(url, json={"chat_id": target_id}, timeout=10)
-    data = r.json()
+def _tg(method: str, **params) -> dict:
+    try:
+        r = requests.post(f"https://api.telegram.org/bot{TOKEN}/{method}", json=params, timeout=10)
+        return r.json()
+    except Exception as e:
+        log.warning(f"{method} error: {e}")
+        return {"ok": False, "description": str(e)}
 
+
+def _tree(rows: list[tuple[str, str]]) -> str:
+    """Рисует рамочку: ├ ... └ ..."""
+    lines = []
+    for i, (label, value) in enumerate(rows):
+        branch = "└" if i == len(rows) - 1 else "├"
+        lines.append(f"{branch} <b>{label}:</b> {value}")
+    return "\n".join(lines)
+
+
+def _esc(s) -> str:
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня",
+          "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+
+
+def get_user_info_text(target_id: int, chat_id: int = None, tg_user: types.User = None) -> str:
+    data = _tg("getChat", chat_id=target_id)
     if not data.get("ok"):
-        return f"❌ Не удалось получить информацию: {data.get('description', 'неизвестная ошибка')}"
+        return f"❌ Не удалось получить информацию: {_esc(data.get('description', 'неизвестная ошибка'))}"
 
     chat = data["result"]
-    first_name = chat.get("first_name", "—")
-    last_name = chat.get("last_name", "")
-    username = f"@{chat['username']}" if chat.get("username") else "нет username"
     uid = chat.get("id", target_id)
-    bio = chat.get("bio") or "нет биографии"
-    full_name = f"{first_name} {last_name}".strip()
-    profile_link = f"https://t.me/{chat['username']}" if chat.get("username") else f"tg://user?id={uid}"
 
-    return (
-        f"👤 <b>Информация о пользователе</b>\n"
-        f"━━━━━━━━━━━━━━━\n"
-        f"📛 <b>Имя:</b> {full_name}\n"
-        f"🔖 <b>Юзернейм:</b> {username}\n"
-        f"🆔 <b>ID:</b> <code>{uid}</code>\n"
-        f"📝 <b>Биография:</b> {bio}\n"
-        f"🔗 <b>Профиль:</b> <a href='{profile_link}'>открыть</a>"
-    )
+    # ── Основное ──────────────────────────────────────────────────
+    full_name = _esc(f"{chat.get('first_name', '')} {chat.get('last_name', '')}".strip() or "—")
+    usernames = chat.get("active_usernames") or ([chat["username"]] if chat.get("username") else [])
+    username = ", ".join(f"@{u}" for u in usernames) if usernames else "нет"
+    profile_link = f"https://t.me/{usernames[0]}" if usernames else f"tg://user?id={uid}"
+    bio = _esc(chat.get("bio") or "нет")
+
+    main_rows = [
+        ("Имя", full_name),
+        ("Юзернейм", username),
+        ("ID", f"<code>{uid}</code>"),
+        ("Био", bio),
+        ("Профиль", f"<a href='{profile_link}'>открыть</a>"),
+    ]
+
+    # ── Аккаунт ───────────────────────────────────────────────────
+    acc_rows = []
+    if tg_user is not None:
+        acc_rows.append(("Premium", "✅ да" if getattr(tg_user, "is_premium", None) else "❌ нет"))
+        acc_rows.append(("Бот", "🤖 да" if tg_user.is_bot else "нет"))
+        if tg_user.language_code:
+            acc_rows.append(("Язык", tg_user.language_code))
+
+    bd = chat.get("birthdate")
+    if bd:
+        s = f"{bd['day']} {MONTHS[bd['month'] - 1]}"
+        if bd.get("year"):
+            s += f" {bd['year']}"
+            age = datetime.now().year - bd["year"]
+            if (datetime.now().month, datetime.now().day) < (bd["month"], bd["day"]):
+                age -= 1
+            s += f" ({age} лет)"
+        acc_rows.append(("День рождения", s))
+
+    pc = chat.get("personal_chat")
+    if pc:
+        pc_name = _esc(pc.get("title") or "канал")
+        pc_user = pc.get("username")
+        acc_rows.append(("Личный канал", f"<a href='https://t.me/{pc_user}'>{pc_name}</a>" if pc_user else pc_name))
+
+    if chat.get("accent_color_id") is not None:
+        acc_rows.append(("Цвет профиля", f"#{chat['accent_color_id']}"))
+    if chat.get("emoji_status_custom_emoji_id"):
+        acc_rows.append(("Эмодзи-статус", "есть"))
+    if chat.get("has_private_forwards"):
+        acc_rows.append(("Скрыты пересылки", "да"))
+    if chat.get("has_restricted_voice_and_video_messages"):
+        acc_rows.append(("Голосовые/кружки", "ограничены"))
+    if chat.get("message_auto_delete_time"):
+        acc_rows.append(("Автоудаление", f"{chat['message_auto_delete_time']} сек"))
+
+    photos = _tg("getUserProfilePhotos", user_id=target_id, limit=1)
+    if photos.get("ok"):
+        acc_rows.append(("Фото профиля", str(photos["result"].get("total_count", 0))))
+
+    # ── Бизнес ────────────────────────────────────────────────────
+    biz_rows = []
+    intro = chat.get("business_intro")
+    if intro:
+        if intro.get("title"):
+            biz_rows.append(("Заголовок", _esc(intro["title"])))
+        if intro.get("message"):
+            biz_rows.append(("Приветствие", _esc(intro["message"])))
+    loc = chat.get("business_location")
+    if loc:
+        biz_rows.append(("Адрес", _esc(loc.get("address", "—"))))
+    if chat.get("business_opening_hours"):
+        biz_rows.append(("Часы работы", _esc(chat["business_opening_hours"].get("time_zone_name", "есть"))))
+
+    # ── Статус в боте ─────────────────────────────────────────────
+    bot_rows = []
+    if chat_id is not None:
+        bot_rows.append(("Мут", "🔇 да" if is_muted(chat_id, target_id) else "🔊 нет"))
+        modes = [n for n, d in (("Пикми", pikmi_mode), ("Итальянский", italian_mode),
+                                ("Эмо", emo_mode), ("Джентльмен", gentleman_mode)) if d.get(chat_id)]
+        bot_rows.append(("Режимы чата", ", ".join(modes) if modes else "нет"))
+
+    history = name_history.get(target_id, [])
+    if history:
+        bot_rows.append(("Смен имени", str(len(history) - 1)))
+        bot_rows.append(("Впервые замечен", history[0]["seen"]))
+
+    # ── Сборка ────────────────────────────────────────────────────
+    parts = ["👤 <b>Информация о пользователе</b>", _tree(main_rows)]
+    if acc_rows:
+        parts += ["", "🪪 <b>Аккаунт</b>", _tree(acc_rows)]
+    if biz_rows:
+        parts += ["", "💼 <b>Бизнес</b>", _tree(biz_rows)]
+    if bot_rows:
+        parts += ["", "🤖 <b>В боте</b>", _tree(bot_rows)]
+
+    if len(history) > 1:
+        hist_rows = []
+        for h in history[-5:]:
+            un = f" (@{h['username']})" if h["username"] else ""
+            hist_rows.append((h["seen"], _esc(f"{h['name']}{un}")))
+        parts += ["", "📜 <b>История имён</b>", _tree(hist_rows)]
+
+    return "\n".join(parts)
 
 
 # ── Новые сообщения ───────────────────────────────────────────────
@@ -856,14 +811,13 @@ def handle_new(message: types.Message):
             if pikmi_mode.get(chat_id, False):
                 pikmi_mode[chat_id] = False
                 edit_business_msg(chat_id, msg_id, biz_id,
-                    "🌸 <b>Пикми-режим выключен</b> 🌸\nМилые приписки, сердечки и «ня~» больше не добавляются. Сообщения снова обычные.")
+                    "🌸 <b>Пикми-режим выключен</b> 🌸\nТвои сообщения снова обычные~")
             else:
                 pikmi_mode[chat_id] = True
                 edit_business_msg(chat_id, msg_id, biz_id,
-                    "💕 <b>Пикми-режим включён!</b> 💕\n"
-                    "К каждому сообщению добавляются «ня~», «пупсик», сердечки, каомодзи (≧◡≦) и милые префиксы, "
-                    "иногда растягиваются гласные.\n"
-                    "Выключить: .pm 🎀")
+                    "💕 <b>Пикми-режим включен!</b> 💕\n"
+                    "Теперь к твоим сообщениям будут добавляться милые штучки!\n"
+                    "Пиши .pm снова чтобы выключить 🎀")
 
         elif text_lower == ".inl":
             if pikmi_mode.get(chat_id, False):
@@ -875,14 +829,13 @@ def handle_new(message: types.Message):
             if italian_mode.get(chat_id, False):
                 italian_mode[chat_id] = False
                 edit_business_msg(chat_id, msg_id, biz_id,
-                    "🇮🇹 <b>Итальянский романтик-режим выключен</b> 🇮🇹\nАморе, ciao-ciao и жесты 🤌 больше не добавляются. Сообщения снова обычные.")
+                    "🇮🇹 <b>Итальянский режим выключен</b> 🇮🇹\nТвои сообщения снова обычные~")
             else:
                 italian_mode[chat_id] = True
                 edit_business_msg(chat_id, msg_id, biz_id,
-                    "🇮🇹 <b>Итальянский романтик-режим включён!</b> 💕\n"
-                    "Обращения «Amore mio», «Tesoro», страстные итальянские фразы, жесты 🤌 "
-                    "и замена слов (привет → Ciao bella, спасибо → Grazie mille).\n"
-                    "Выключить: .inl 🍝")
+                    "🇮🇹 <b>Итальянский романтик-режим включен!</b> 💕\n"
+                    "Теперь твои сообщения станут страстными и романтичными как в Италии!\n"
+                    "Пиши .inl снова чтобы выключить 🤌")
 
         elif text_lower == ".emo":
             if pikmi_mode.get(chat_id, False):
@@ -894,14 +847,13 @@ def handle_new(message: types.Message):
             if emo_mode.get(chat_id, False):
                 emo_mode[chat_id] = False
                 edit_business_msg(chat_id, msg_id, biz_id,
-                    "🖤 <b>Эмо-режим выключен</b> 🖤\nМрак, тоска и «вЕчНыЙ мРаК» больше не добавляются. Сообщения снова обычные.")
+                    "🖤 <b>Эмо-режим выключен</b> 🖤\nТвои сообщения снова обычные~")
             else:
                 emo_mode[chat_id] = True
                 edit_business_msg(chat_id, msg_id, biz_id,
-                    "🖤 <b>Эмо-режим включён!</b> 💔\n"
-                    "Сообщения пишутся с мрачными фразами, многоточиями, ПрЫгАюЩиМ рЕгИсТрОм и "
-                    "тёмными эмодзи 🥀🕷️; привет, пока, спасибо заменяются на печальные версии.\n"
-                    "Выключить: .emo 🌑")
+                    "🖤 <b>Эмо-режим включен!</b> 💔\n"
+                    "Теперь твои сообщения будут наполнены глубокой печалью и философией...\n"
+                    "Пиши .emo снова чтобы выключить 🥀")
 
         elif text_lower == ".gt":
             if pikmi_mode.get(chat_id, False):
@@ -913,14 +865,13 @@ def handle_new(message: types.Message):
             if gentleman_mode.get(chat_id, False):
                 gentleman_mode[chat_id] = False
                 edit_business_msg(chat_id, msg_id, biz_id,
-                    "🎩 <b>Джентльменский режим выключен</b> 🎩\nАристократические обращения и «честь имею» больше не добавляются. Сообщения снова обычные.")
+                    "🎩 <b>Джентльменский режим выключен</b> 🎩\nТвои сообщения снова обычные~")
             else:
                 gentleman_mode[chat_id] = True
                 edit_business_msg(chat_id, msg_id, biz_id,
-                    "🎩 <b>Джентльменский режим включён!</b> 🧐\n"
-                    "Сообщения звучат по-аристократически: «Сударь», «Честь имею», «Покорнейше благодарю», "
-                    "слова вроде «хочу» заменяются на «желаю», а привет, спасибо, да/нет получают изысканные версии.\n"
-                    "Выключить: .gt 📜")
+                    "🎩 <b>Джентльменский режим включен!</b> 🧐\n"
+                    "Теперь твои сообщения будут исполнены аристократического изящества и благородства!\n"
+                    "Пиши .gt снова чтобы выключить 📜")
 
         elif text_lower == ".tr":
             if not message.reply_to_message:
@@ -966,12 +917,14 @@ def handle_new(message: types.Message):
                 schedule_delete(chat_id, sent_id, biz_id, delay=10)
 
         elif text_lower == ".info":
-            target_id = (
-                message.reply_to_message.from_user.id
+            reply_user = (
+                message.reply_to_message.from_user
                 if message.reply_to_message and message.reply_to_message.from_user
-                else chat_id
+                else None
             )
-            edit_business_msg(chat_id, msg_id, biz_id, get_user_info_text(target_id))
+            target_id = reply_user.id if reply_user else chat_id
+            edit_business_msg(chat_id, msg_id, biz_id,
+                              get_user_info_text(target_id, chat_id=chat_id, tg_user=reply_user))
 
         # ── Применяем активный режим ──────────────────────────────
         if text and not text_lower.startswith("."):
