@@ -1,31 +1,32 @@
 from __future__ import annotations
 
-import functools
+import asyncio
 import html
 import logging
-import os
 import random
 import re
-import sys
-import threading
-import time
 import xml.etree.ElementTree as ET
 from collections import OrderedDict
 from datetime import datetime
+from functools import wraps
+from urllib.parse import quote
 
-import requests
-import telebot
-from telebot import types
+import aiohttp
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramAPIError, TelegramNetworkError, TelegramRetryAfter
+from aiogram.types import BusinessConnection, Message, User
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
+logging.getLogger("aiogram.event").setLevel(logging.WARNING)   # не спамить «Update handled» в лог
 log = logging.getLogger(__name__)
 
 # Токен бота прописан прямо в коде. Вставьте свой токен от @BotFather между кавычками.
 TOKEN = "8712603440:AAF7bO-ED3SB_sZV1w2T3ZEnkAZ52iWqSJ8"
 
-# num_threads=8: пока одни обработчики ждут ответ от внешних сервисов,
-# остальные сообщения не зависают в очереди.
-bot = telebot.TeleBot(TOKEN, parse_mode="HTML", threaded=True, num_threads=8)
+bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+dp = Dispatcher()
 
 TG_LIMIT = 4096            # максимум символов в одном сообщении Telegram
 MSG_CACHE_LIMIT = 5000     # сколько последних сообщений помним (для «Было / Стало»)
@@ -35,13 +36,12 @@ SPAM_DELAY = 1.0           # пауза между сообщениями спа
 muted: dict[int, set[int]] = {}
 owners: dict[str, int] = {}
 msg_cache: OrderedDict[tuple, str] = OrderedDict()
-spam_stop: dict[int, threading.Event] = {}
+spam_stop: dict[int, asyncio.Event] = {}
 name_history: dict[int, list[dict]] = {}
 chat_mode: dict[int, str] = {}   # chat_id -> ключ активного режима ("pm", "inl", "emo", "gt")
 
-cache_lock = threading.Lock()
-spam_lock = threading.Lock()
-_session = requests.Session()
+background_tasks: set[asyncio.Task] = set()   # чтобы фоновые задачи не собрал сборщик мусора
+_http: aiohttp.ClientSession | None = None
 
 
 # ── Утилиты ───────────────────────────────────────────────────────
@@ -77,14 +77,28 @@ def fmt_amount(value: float) -> str:
 
 def cache_put(chat_id: int, msg_id: int, text: str):
     key = (chat_id, msg_id)
-    with cache_lock:
-        msg_cache[key] = text
-        msg_cache.move_to_end(key)
-        while len(msg_cache) > MSG_CACHE_LIMIT:
-            msg_cache.popitem(last=False)
+    msg_cache[key] = text
+    msg_cache.move_to_end(key)
+    while len(msg_cache) > MSG_CACHE_LIMIT:
+        msg_cache.popitem(last=False)
 
 
-def content_of(message: types.Message) -> str:
+def http() -> aiohttp.ClientSession:
+    """Общая HTTP-сессия для внешних сервисов (курс, погода, перевод)."""
+    global _http
+    if _http is None or _http.closed:
+        _http = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
+    return _http
+
+
+def spawn(coro) -> asyncio.Task:
+    task = asyncio.create_task(coro)
+    background_tasks.add(task)
+    task.add_done_callback(background_tasks.discard)
+    return task
+
+
+def content_of(message: Message) -> str:
     return (message.text or message.caption or "").strip()
 
 
@@ -107,47 +121,44 @@ def do_unmute(chat_id, user_id) -> bool:
     return True
 
 
-def tg_api(method: str, payload: dict) -> dict:
+async def tg_call(label: str, make_call):
     """
-    Вызов Bot API. Никогда не бросает исключений и не пишет токен в логи.
-    При лимите запросов (429) ждёт и повторяет попытку.
+    Вызов Bot API без исключений. Возвращает (результат, None) или (None, описание_ошибки).
+    Не пишет токен в логи. При лимите запросов (429) ждёт и повторяет попытку.
     """
-    url = f"https://api.telegram.org/bot{TOKEN}/{method}"
-    result = {"ok": False, "description": "нет ответа от Telegram"}
+    error = "нет ответа от Telegram"
     for _ in range(3):
         try:
-            data = _session.post(url, json=payload, timeout=15).json()
-        except (requests.RequestException, ValueError) as e:
-            log.warning(f"{method}: сетевая ошибка ({type(e).__name__})")
-            return {"ok": False, "description": "сетевая ошибка"}
-        if data.get("ok"):
-            return data
-        result = data
-        if data.get("error_code") == 429:
-            wait = data.get("parameters", {}).get("retry_after", 1)
-            log.warning(f"{method}: лимит Telegram, жду {wait} с")
-            time.sleep(min(int(wait), 30) + 0.5)
-            continue
-        break
-    return result
+            return await make_call(), None
+        except TelegramRetryAfter as e:
+            wait = min(int(e.retry_after), 30)
+            log.warning(f"{label}: лимит Telegram, жду {wait} с")
+            error = "лимит запросов Telegram"
+            await asyncio.sleep(wait + 0.5)
+        except TelegramNetworkError as e:
+            log.warning(f"{label}: сетевая ошибка ({type(e).__name__})")
+            return None, "сетевая ошибка"
+        except TelegramAPIError as e:
+            return None, str(e.message)
+    return None, error
 
 
-def get_owner(biz_id):
+async def get_owner(biz_id):
     if not biz_id:
         return None
     if biz_id in owners:
         return owners[biz_id]
     try:
-        bc = bot.get_business_connection(biz_id)
-        owners[biz_id] = bc.user.id
-        log.info(f"Владелец определён: {bc.user.id}")
-        return bc.user.id
+        bc = await bot.get_business_connection(biz_id)
     except Exception as e:
         log.warning(f"Не удалось определить владельца: {type(e).__name__}")
         return None
+    owners[biz_id] = bc.user.id
+    log.info(f"Владелец определён: {bc.user.id}")
+    return bc.user.id
 
 
-def track_name(user: types.User):
+def track_name(user: User):
     uid = user.id
     full_name = (user.first_name or "").strip()
     if user.last_name:
@@ -164,54 +175,50 @@ def track_name(user: types.User):
     log.info(f"📝 История имён: {uid} → {full_name} / @{username}")
 
 
-def delete_business_msg(chat_id: int, msg_id: int, biz_id: str) -> bool:
-    data = tg_api("deleteBusinessMessages", {
-        "business_connection_id": biz_id,
-        "chat_id": chat_id,
-        "message_ids": [msg_id],
-    })
-    if not data.get("ok"):
-        log.warning(f"❌ Ошибка удаления: {data.get('description')}")
-    return bool(data.get("ok"))
+async def delete_business_msg(chat_id: int, msg_id: int, biz_id: str) -> bool:
+    _, err = await tg_call(
+        "deleteBusinessMessages",
+        lambda: bot.delete_business_messages(business_connection_id=biz_id, message_ids=[msg_id]),
+    )
+    if err is not None:
+        log.warning(f"❌ Ошибка удаления: {err}")
+        return False
+    return True
 
 
-def edit_business_msg(chat_id: int, msg_id: int, biz_id: str, text: str) -> bool:
+async def edit_business_msg(chat_id: int, msg_id: int, biz_id: str, text: str) -> bool:
     if len(text) > TG_LIMIT:
         log.warning("❌ Ошибка редактирования: текст длиннее лимита Telegram")
         return False
-    data = tg_api("editMessageText", {
-        "business_connection_id": biz_id,
-        "chat_id": chat_id,
-        "message_id": msg_id,
-        "text": text,
-        "parse_mode": "HTML",
-    })
-    if data.get("ok"):
+    _, err = await tg_call(
+        "editMessageText",
+        lambda: bot.edit_message_text(
+            text=text, chat_id=chat_id, message_id=msg_id, business_connection_id=biz_id
+        ),
+    )
+    if err is None:
         return True
-    desc = str(data.get("description", ""))
-    if "not modified" in desc:   # текст уже такой же — это не ошибка
+    if "not modified" in err:   # текст уже такой же — это не ошибка
         return True
-    log.warning(f"❌ Ошибка редактирования: {desc}")
+    log.warning(f"❌ Ошибка редактирования: {err}")
     return False
 
 
-def send_business_msg(chat_id: int, biz_id: str, text: str) -> int | None:
+async def send_business_msg(chat_id: int, biz_id: str, text: str) -> int | None:
     if len(text) > TG_LIMIT:
         log.warning("❌ Ошибка отправки: текст длиннее лимита Telegram")
         return None
-    data = tg_api("sendMessage", {
-        "business_connection_id": biz_id,
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "HTML",
-    })
-    if data.get("ok"):
-        return data["result"]["message_id"]
-    log.warning(f"❌ Ошибка отправки: {data.get('description')}")
+    sent, err = await tg_call(
+        "sendMessage",
+        lambda: bot.send_message(chat_id=chat_id, text=text, business_connection_id=biz_id),
+    )
+    if err is None:
+        return sent.message_id
+    log.warning(f"❌ Ошибка отправки: {err}")
     return None
 
 
-def format_user(from_user):
+def format_user(from_user: User):
     username = f"@{from_user.username}" if from_user.username else "нет username"
     full_name = from_user.first_name or ""
     if from_user.last_name:
@@ -219,7 +226,7 @@ def format_user(from_user):
     return full_name.strip(), username
 
 
-def notify_owner(owner_id: int, from_user, text: str, event: str, old_text: str = None):
+async def notify_owner(owner_id: int, from_user: User, text: str, event: str, old_text: str = None):
     full_name, username = format_user(from_user)
     who = f"{esc(full_name) or 'Без имени'} ({esc(username)})"
     if event == "deleted":
@@ -240,10 +247,9 @@ def notify_owner(owner_id: int, from_user, text: str, event: str, old_text: str 
             f'<tg-emoji emoji-id="6030776052345737530">📄</tg-emoji> Было:\n{fit_escaped(old, 1600)}\n\n'
             f'<tg-emoji emoji-id="5258215846450305872">✏️</tg-emoji> Стало:\n{fit_escaped(text, 1600)}'
         )
-    try:
-        bot.send_message(owner_id, body, parse_mode="HTML")
-    except Exception as e:
-        log.warning(f"Не удалось уведомить владельца: {type(e).__name__}")
+    _, err = await tg_call("sendMessage", lambda: bot.send_message(chat_id=owner_id, text=body))
+    if err is not None:
+        log.warning(f"Не удалось уведомить владельца: {err}")
 
 
 def normalize(text: str) -> str:
@@ -622,7 +628,7 @@ def parse_rate_input(raw: str):
     return None, None
 
 
-def get_rate(raw: str) -> str:
+async def get_rate(raw: str) -> str:
     """Получает актуальный курс ЦБ РФ."""
     amount, currency = parse_rate_input(raw)
     if not currency:
@@ -631,13 +637,13 @@ def get_rate(raw: str) -> str:
         return "ℹ️ Рубль — базовая валюта, курс считается относительно него.\nУкажите другую валюту: USD, EUR, CNY..."
 
     try:
-        r = _session.get(
+        async with http().get(
             "https://www.cbr.ru/scripts/XML_daily.asp",
             headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10,
-        )
-        r.raise_for_status()
-        root = ET.fromstring(r.content)
+        ) as r:
+            r.raise_for_status()
+            content = await r.read()
+        root = ET.fromstring(content)
 
         rate_rub = None
         for valute in root.findall("Valute"):
@@ -646,7 +652,7 @@ def get_rate(raw: str) -> str:
                 rate_rub = float(valute.find("Value").text.replace(",", ".")) / nominal
                 break
         date = root.attrib.get("Date", "")
-    except requests.RequestException as e:
+    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
         log.warning(f"Курс валют: ошибка соединения ({type(e).__name__})")
         return "❌ Не удалось связаться с сервером ЦБ РФ. Попробуйте чуть позже."
     except (ET.ParseError, ValueError, AttributeError) as e:
@@ -706,19 +712,18 @@ def weather_emoji(desc: str) -> str:
     return "🌤"
 
 
-def get_weather(city: str) -> str:
+async def get_weather(city: str) -> str:
     """Получает погоду через бесплатный wttr.in."""
     not_found = "❌ Город не найден. Проверьте название и попробуйте ещё раз.\nПример: .weth Москва"
     try:
-        r = _session.get(
-            "https://wttr.in/" + requests.utils.quote(city) + "?format=j1&lang=ru",
+        async with http().get(
+            "https://wttr.in/" + quote(city) + "?format=j1&lang=ru",
             headers={"User-Agent": "curl/7.0"},
-            timeout=10,
-        )
-        if r.status_code == 404:
-            return not_found
-        r.raise_for_status()
-        data = r.json()
+        ) as r:
+            if r.status == 404:
+                return not_found
+            r.raise_for_status()
+            data = await r.json(content_type=None)
         current = data["current_condition"][0]
         area = data["nearest_area"][0]
         city_name = area["areaName"][0]["value"]
@@ -730,7 +735,7 @@ def get_weather(city: str) -> str:
         humidity = current["humidity"]
         wind = current["windspeedKmph"]
         wind_dir = WIND_DIRS.get(current["winddir16Point"], current["winddir16Point"])
-    except requests.RequestException as e:
+    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
         log.warning(f"Погода: ошибка соединения ({type(e).__name__})")
         return "❌ Сервис погоды сейчас недоступен. Попробуйте чуть позже."
     except (ValueError, KeyError, IndexError, TypeError) as e:
@@ -750,11 +755,14 @@ def get_weather(city: str) -> str:
 
 # ── Самоуничтожение ───────────────────────────────────────────────
 
+async def _delete_later(chat_id: int, msg_id: int, biz_id: str, delay: int):
+    await asyncio.sleep(delay)
+    await delete_business_msg(chat_id, msg_id, biz_id)
+
+
 def schedule_delete(chat_id: int, msg_id: int, biz_id: str, delay: int):
     """Удаляет сообщение через delay секунд."""
-    timer = threading.Timer(delay, delete_business_msg, args=(chat_id, msg_id, biz_id))
-    timer.daemon = True
-    timer.start()
+    spawn(_delete_later(chat_id, msg_id, biz_id, delay))
 
 
 # ── Перевод ───────────────────────────────────────────────────────
@@ -762,19 +770,18 @@ def schedule_delete(chat_id: int, msg_id: int, biz_id: str, delay: int):
 TRANSLATE_LIMIT = 3000
 
 
-def translate_to_russian(text: str) -> str:
+async def translate_to_russian(text: str) -> str:
     """Переводит текст на русский язык через бесплатный Google Translate."""
     try:
-        r = _session.get(
+        async with http().get(
             "https://translate.googleapis.com/translate_a/single",
             params={"client": "gtx", "sl": "auto", "tl": "ru", "dt": "t", "q": text[:TRANSLATE_LIMIT]},
             headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10,
-        )
-        r.raise_for_status()
-        data = r.json()
+        ) as r:
+            r.raise_for_status()
+            data = await r.json(content_type=None)
         result = "".join(part[0] for part in data[0] if part and part[0])
-    except requests.RequestException as e:
+    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
         log.warning(f"Перевод: ошибка соединения ({type(e).__name__})")
         return "❌ Сервис перевода сейчас недоступен. Попробуйте чуть позже."
     except (ValueError, KeyError, IndexError, TypeError) as e:
@@ -785,14 +792,14 @@ def translate_to_russian(text: str) -> str:
 
 # ── Спам ──────────────────────────────────────────────────────────
 
-def run_spam(chat_id: int, biz_id: str, text: str, count: int, stop_event: threading.Event):
+async def run_spam(chat_id: int, biz_id: str, text: str, count: int, stop_event: asyncio.Event):
     sent = 0
     failures = 0
     try:
         for _ in range(count):
             if stop_event.is_set():
                 break
-            if send_business_msg(chat_id, biz_id, text):
+            if await send_business_msg(chat_id, biz_id, text):
                 sent += 1
                 failures = 0
             else:
@@ -800,31 +807,32 @@ def run_spam(chat_id: int, biz_id: str, text: str, count: int, stop_event: threa
                 if failures >= 5:
                     log.warning("⚠️ Спам остановлен: 5 неудачных отправок подряд")
                     break
-            stop_event.wait(SPAM_DELAY)   # в отличие от sleep, прерывается командой .stop сразу
+            try:
+                # ждём паузу, но команда .stop прерывает ожидание сразу
+                await asyncio.wait_for(stop_event.wait(), timeout=SPAM_DELAY)
+            except asyncio.TimeoutError:
+                pass
     finally:
-        with spam_lock:
-            if spam_stop.get(chat_id) is stop_event:
-                spam_stop.pop(chat_id, None)
+        if spam_stop.get(chat_id) is stop_event:
+            spam_stop.pop(chat_id, None)
         log.info(f"✅ Спам завершён: {sent}/{count}")
 
 
 # ── .info ─────────────────────────────────────────────────────────
 
-def get_user_info_text(target_id: int) -> str:
-    data = tg_api("getChat", {"chat_id": target_id})
+async def get_user_info_text(target_id: int) -> str:
+    chat, err = await tg_call("getChat", lambda: bot.get_chat(target_id))
 
-    if not data.get("ok"):
-        reason = esc(data.get("description", "неизвестная ошибка"))
-        return f"❌ Не удалось получить информацию о пользователе.\n<i>{reason}</i>"
+    if err is not None:
+        return f"❌ Не удалось получить информацию о пользователе.\n<i>{esc(err)}</i>"
 
-    chat = data["result"]
-    first_name = chat.get("first_name", "—")
-    last_name = chat.get("last_name", "")
-    username = f"@{chat['username']}" if chat.get("username") else "нет username"
-    uid = chat.get("id", target_id)
-    bio = chat.get("bio") or "не указана"
+    first_name = chat.first_name or "—"
+    last_name = chat.last_name or ""
+    username = f"@{chat.username}" if chat.username else "нет username"
+    uid = chat.id
+    bio = getattr(chat, "bio", None) or "не указана"
     full_name = f"{first_name} {last_name}".strip()
-    profile_link = f"https://t.me/{chat['username']}" if chat.get("username") else f"tg://user?id={uid}"
+    profile_link = f"https://t.me/{chat.username}" if chat.username else f"tg://user?id={uid}"
 
     return (
         "👤 <b>Информация о пользователе</b>\n"
@@ -861,16 +869,16 @@ def parse_command(text: str):
 
 def safe(handler):
     """Ошибка в одном обработчике не должна ломать работу бота."""
-    @functools.wraps(handler)
-    def wrapper(message):
+    @wraps(handler)
+    async def wrapper(message: Message):
         try:
-            handler(message)
+            await handler(message)
         except Exception:
             log.exception(f"Ошибка в обработчике {handler.__name__}")
     return wrapper
 
 
-def handle_owner_command(message: types.Message, cmd: str, args: str):
+async def handle_owner_command(message: Message, cmd: str, args: str):
     chat_id = message.chat.id
     msg_id = message.message_id
     biz_id = message.business_connection_id
@@ -878,24 +886,24 @@ def handle_owner_command(message: types.Message, cmd: str, args: str):
     replied = message.reply_to_message
     replied_user = replied.from_user if replied and replied.from_user else None
 
-    def reply(text: str):
-        edit_business_msg(chat_id, msg_id, biz_id, text)
+    async def reply(text: str):
+        await edit_business_msg(chat_id, msg_id, biz_id, text)
 
     if cmd == ".mute":
         if replied_user:
             target = replied_user.id
             if target == owner_id:
-                reply("❌ Нельзя заглушить самого себя.")
+                await reply("❌ Нельзя заглушить самого себя.")
                 return
             name = esc(replied_user.first_name or target)
             do_mute(chat_id, target)
-            reply(
+            await reply(
                 f'<tg-emoji emoji-id="5357069174512303778">🔇</tg-emoji> <b>{name}</b> заглушён.\n'
                 "Его сообщения будут удаляться. Чтобы снять мут, отправьте .unmute в ответ на его сообщение."
             )
         else:
             do_mute(chat_id, -1)
-            reply(
+            await reply(
                 '<tg-emoji emoji-id="5357069174512303778">🔇</tg-emoji> Все сообщения собеседника в этом чате заглушены.\n'
                 "Чтобы снять мут, отправьте .unmute."
             )
@@ -905,116 +913,112 @@ def handle_owner_command(message: types.Message, cmd: str, args: str):
             target = replied_user.id
             name = esc(replied_user.first_name or target)
             if do_unmute(chat_id, target):
-                reply(
+                await reply(
                     f'<tg-emoji emoji-id="5357069174512303778">🔊</tg-emoji> Мут с <b>{name}</b> снят. '
                     "Сообщения снова доступны."
                 )
             else:
-                reply(f"ℹ️ <b>{name}</b> не был заглушён.")
+                await reply(f"ℹ️ <b>{name}</b> не был заглушён.")
         else:
             if do_unmute(chat_id, -1):
-                reply(
+                await reply(
                     '<tg-emoji emoji-id="5357069174512303778">🔊</tg-emoji> Мут снят. '
                     "Сообщения снова доступны."
                 )
             else:
-                reply(
+                await reply(
                     "ℹ️ Общий мут в этом чате не включён.\n"
                     "Чтобы снять мут с конкретного человека, отправьте .unmute в ответ на его сообщение."
                 )
 
     elif cmd == ".stop":
-        with spam_lock:
-            event = spam_stop.get(chat_id)
+        event = spam_stop.get(chat_id)
         if event:
             event.set()
-            reply("🛑 Спам остановлен.")
+            await reply("🛑 Спам остановлен.")
         else:
-            reply("ℹ️ В этом чате нет активного спама.")
+            await reply("ℹ️ В этом чате нет активного спама.")
 
     elif cmd == ".spam":
         usage = "Формат: .spam <текст> <количество>\nПример: .spam gg 10"
         pair = args.rsplit(None, 1)
         if len(pair) < 2:
-            reply("❌ Не хватает данных.\n" + usage)
+            await reply("❌ Не хватает данных.\n" + usage)
             return
         spam_text, count_raw = pair[0].strip(), pair[1]
         try:
             count = int(count_raw)
         except ValueError:
-            reply("❌ Количество должно быть целым числом.\n" + usage)
+            await reply("❌ Количество должно быть целым числом.\n" + usage)
             return
         if count < 1 or count > 1000:
-            reply("❌ Количество должно быть от 1 до 1000.")
+            await reply("❌ Количество должно быть от 1 до 1000.")
             return
         if len(spam_text) > 4000:
-            reply("❌ Текст слишком длинный (максимум 4000 символов).")
+            await reply("❌ Текст слишком длинный (максимум 4000 символов).")
             return
-        with spam_lock:
-            old = spam_stop.get(chat_id)
-            if old:
-                old.set()
-            stop_event = threading.Event()
-            spam_stop[chat_id] = stop_event
-        reply(
+        old = spam_stop.get(chat_id)
+        if old:
+            old.set()
+        stop_event = asyncio.Event()
+        spam_stop[chat_id] = stop_event
+        await reply(
             f"📨 <b>Спам запущен</b>: «{esc(shorten(spam_text, 200))}» × {count}\n"
             "Чтобы остановить, отправьте .stop"
         )
-        threading.Thread(
-            target=run_spam, args=(chat_id, biz_id, spam_text, count, stop_event), daemon=True
-        ).start()
+        spawn(run_spam(chat_id, biz_id, spam_text, count, stop_event))
 
     elif cmd in (".pm", ".inl", ".emo", ".gt"):
-        reply(toggle_mode(chat_id, cmd[1:]))
+        await reply(toggle_mode(chat_id, cmd[1:]))
 
     elif cmd == ".tr":
         if not replied:
-            reply("❌ Отправьте .tr в ответ на сообщение, которое нужно перевести.")
+            await reply("❌ Отправьте .tr в ответ на сообщение, которое нужно перевести.")
             return
         original_text = content_of(replied)
         if not original_text:
-            reply("❌ В этом сообщении нет текста для перевода.")
+            await reply("❌ В этом сообщении нет текста для перевода.")
             return
-        reply("🌐 Перевожу...")
-        translated = translate_to_russian(original_text)
+        await reply("🌐 Перевожу...")
+        translated = await translate_to_russian(original_text)
         if translated.startswith("❌"):
-            reply(translated)
+            await reply(translated)
         else:
-            reply(f"🌐 <b>Перевод на русский:</b>\n\n{translated}")
+            await reply(f"🌐 <b>Перевод на русский:</b>\n\n{translated}")
 
     elif cmd == ".rate":
         if not args:
-            reply("❌ Укажите валюту.\n" + RATE_USAGE)
+            await reply("❌ Укажите валюту.\n" + RATE_USAGE)
             return
-        reply(get_rate(args))
+        await reply(await get_rate(args))
 
     elif cmd == ".weth":
         if not args:
-            reply("❌ Укажите город.\nПример: .weth Москва")
+            await reply("❌ Укажите город.\nПример: .weth Москва")
             return
-        reply("🌤 Получаю погоду...")
-        reply(get_weather(args))
+        await reply("🌤 Получаю погоду...")
+        await reply(await get_weather(args))
 
     elif cmd == ".sec":
         if not args:
-            reply("❌ Укажите текст.\nПример: .sec Это секрет!")
+            await reply("❌ Укажите текст.\nПример: .sec Это секрет!")
             return
-        sent_id = send_business_msg(
+        sent_id = await send_business_msg(
             chat_id, biz_id,
             f"🤫 <b>Секретное сообщение</b>\n\n{fit_escaped(args, 3800)}\n\n<i>Исчезнет через 10 секунд...</i>",
         )
         if sent_id:
-            delete_business_msg(chat_id, msg_id, biz_id)
+            await delete_business_msg(chat_id, msg_id, biz_id)
             schedule_delete(chat_id, sent_id, biz_id, delay=10)
         else:
-            reply("❌ Не удалось отправить секретное сообщение. Попробуйте ещё раз.")
+            await reply("❌ Не удалось отправить секретное сообщение. Попробуйте ещё раз.")
 
     elif cmd == ".info":
         target_id = replied_user.id if replied_user else chat_id
-        reply(get_user_info_text(target_id))
+        await reply(await get_user_info_text(target_id))
 
 
-def apply_active_mode(message: types.Message, text: str):
+async def apply_active_mode(message: Message, text: str):
     """Если в чате включён режим, переписывает обычное сообщение владельца."""
     key = chat_mode.get(message.chat.id)
     if not key:
@@ -1024,22 +1028,34 @@ def apply_active_mode(message: types.Message, text: str):
     if len(new_text) > TG_LIMIT:
         log.info(f"{mode['icon']} {mode['title']}: результат слишком длинный, сообщение оставлено как есть")
         return
-    edit_business_msg(message.chat.id, message.message_id, message.business_connection_id, new_text)
+    await edit_business_msg(message.chat.id, message.message_id, message.business_connection_id, new_text)
     log.info(f"{mode['icon']} {mode['title']}: {shorten(text, 60)!r} → {shorten(new_text, 60)!r}")
+
+
+# ── Подключение бизнес-аккаунта ───────────────────────────────────
+
+@dp.business_connection()
+async def handle_connection(connection: BusinessConnection):
+    if connection.is_enabled:
+        owners[connection.id] = connection.user.id
+        log.info(f"Бизнес-аккаунт подключён, владелец: {connection.user.id}")
+    else:
+        owners.pop(connection.id, None)
+        log.info("Бизнес-аккаунт отключён")
 
 
 # ── Новые сообщения ───────────────────────────────────────────────
 
-@bot.business_message_handler(func=lambda m: True)
+@dp.business_message()
 @safe
-def handle_new(message: types.Message):
+async def handle_new(message: Message):
     chat_id = message.chat.id
     msg_id = message.message_id
     biz_id = message.business_connection_id
     user_id = message.from_user.id if message.from_user else 0
     text = (message.text or "").strip()
 
-    owner_id = get_owner(biz_id)
+    owner_id = await get_owner(biz_id)
     is_owner = owner_id is not None and user_id == owner_id
 
     log.info(f"[{'ВЛАДЕЛЕЦ' if is_owner else 'СОБЕСЕДНИК'}] user={user_id} msg_id={msg_id} text={shorten(text, 60)!r}")
@@ -1055,9 +1071,9 @@ def handle_new(message: types.Message):
             return
         cmd, args = parse_command(text)
         if cmd:
-            handle_owner_command(message, cmd, args)
+            await handle_owner_command(message, cmd, args)
         else:
-            apply_active_mode(message, text)
+            await apply_active_mode(message, text)
         return
 
     # ── Мут для собеседника ───────────────────────────────────────
@@ -1065,21 +1081,21 @@ def handle_new(message: types.Message):
     if owner_id is None or not biz_id:
         return
     if is_muted(chat_id, user_id) or is_muted(chat_id, -1):
-        if delete_business_msg(chat_id, msg_id, biz_id) and message.from_user:
-            notify_owner(owner_id, message.from_user, stored or "[медиа без текста]", "deleted")
+        if await delete_business_msg(chat_id, msg_id, biz_id) and message.from_user:
+            await notify_owner(owner_id, message.from_user, stored or "[медиа без текста]", "deleted")
 
 
 # ── Изменённые сообщения ──────────────────────────────────────────
 
-@bot.edited_business_message_handler(func=lambda m: True)
+@dp.edited_business_message()
 @safe
-def handle_edited(message: types.Message):
+async def handle_edited(message: Message):
     chat_id = message.chat.id
     msg_id = message.message_id
     biz_id = message.business_connection_id
     user_id = message.from_user.id if message.from_user else 0
 
-    owner_id = get_owner(biz_id)
+    owner_id = await get_owner(biz_id)
     if owner_id is None or user_id == owner_id:
         return
 
@@ -1092,20 +1108,29 @@ def handle_edited(message: types.Message):
     cache_put(chat_id, msg_id, new_text)
 
     if message.from_user:
-        notify_owner(owner_id, message.from_user, new_text, "edited", old_text)
+        await notify_owner(owner_id, message.from_user, new_text, "edited", old_text)
 
 
-if __name__ == "__main__":
+async def main():
     try:
-        bot.remove_webhook()   # если когда-то был вебхук, polling вернёт ошибку 409
+        await bot.delete_webhook()   # если когда-то был вебхук, polling вернёт ошибку 409
     except Exception as e:
         log.warning(f"Не удалось сбросить вебхук: {type(e).__name__}")
     log.info("Бот запущен...")
     try:
-        bot.infinity_polling(
-            skip_pending=True,   # не выполнять старые команды, накопившиеся пока бот был выключен
+        await dp.start_polling(
+            bot,
+            skip_updates=True,   # не выполнять старые команды, накопившиеся пока бот был выключен
             allowed_updates=["business_message", "edited_business_message", "business_connection"],
-            timeout=30, long_polling_timeout=30,
+            polling_timeout=30,
         )
+    finally:
+        if _http is not None and not _http.closed:
+            await _http.close()
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
     except KeyboardInterrupt:
         log.info("Бот остановлен.")
