@@ -23,7 +23,7 @@ logging.getLogger("aiogram.event").setLevel(logging.WARNING)   # не спами
 log = logging.getLogger(__name__)
 
 # Токен бота прописан прямо в коде. Вставьте свой токен от @BotFather между кавычками.
-TOKEN = "8712603440:AAF7bO-ED3SB_sZV1w2T3ZEnkAZ52iWqSJ8"
+TOKEN = "8693034024:AAEjOqhChUGq8IvZHYIOw2-RcfJLSyK7ZBI"
 
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
