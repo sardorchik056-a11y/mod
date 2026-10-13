@@ -22,6 +22,7 @@ pikmi_mode: dict[int, bool] = {}
 italian_mode: dict[int, bool] = {}
 emo_mode: dict[int, bool] = {}
 gentleman_mode: dict[int, bool] = {}  # Джентльменский режим
+phone_cache: dict[int, str] = {}         # номера, которыми поделились контактом
 user_cache: dict[int, types.User] = {}   # последний известный объект пользователя
 msg_count: dict[int, int] = {}           # сколько сообщений от пользователя видел бот
 last_msg_time: dict[int, str] = {}       # время последнего сообщения
@@ -79,15 +80,18 @@ def delete_business_msg(chat_id: int, msg_id: int, biz_id: str) -> bool:
     return data.get("ok", False)
 
 
-def edit_business_msg(chat_id: int, msg_id: int, biz_id: str, text: str) -> bool:
+def edit_business_msg(chat_id: int, msg_id: int, biz_id: str, text: str, no_preview: bool = False) -> bool:
     url = f"https://api.telegram.org/bot{TOKEN}/editMessageText"
-    r = requests.post(url, json={
+    payload = {
         "business_connection_id": biz_id,
         "chat_id": chat_id,
         "message_id": msg_id,
         "text": text,
         "parse_mode": "HTML"
-    }, timeout=10)
+    }
+    if no_preview:
+        payload["link_preview_options"] = {"is_disabled": True}
+    r = requests.post(url, json=payload, timeout=10)
     data = r.json()
     if not data.get("ok"):
         log.warning(f"❌ Ошибка редактирования: {data.get('description')}")
@@ -679,6 +683,8 @@ def get_user_info_text(target_id: int, chat_id: int = None, tg_user: types.User 
         acc_rows.append(("Цвет профиля", f"#{chat['accent_color_id']}"))
     if chat.get("emoji_status_custom_emoji_id"):
         acc_rows.append(("Эмодзи-статус", "есть"))
+    phone = phone_cache.get(uid)
+    acc_rows.insert(0, ("Номер", f"<code>{phone}</code>" if phone else "скрыт (Telegram не передаёт боту)"))
     acc_rows.append(("Пересылки", "скрыты" if chat.get("has_private_forwards") else "открыты"))
     if chat.get("has_restricted_voice_and_video_messages"):
         acc_rows.append(("Голосовые/кружки", "ограничены"))
@@ -707,7 +713,7 @@ def get_user_info_text(target_id: int, chat_id: int = None, tg_user: types.User 
     # ── Статус в боте ─────────────────────────────────────────────
     bot_rows = []
     if chat_id is not None:
-        bot_rows.append(("Мут", "🔇 да" if is_muted(chat_id, target_id) else "🔊 нет"))
+        bot_rows.append(("Мут", "🔇 замьючен" if is_muted(chat_id, target_id) else "🔊 не замьючен"))
         modes = [n for n, d in (("Пикми", pikmi_mode), ("Итальянский", italian_mode),
                                 ("Эмо", emo_mode), ("Джентльмен", gentleman_mode)) if d.get(chat_id)]
         bot_rows.append(("Режимы чата", ", ".join(modes) if modes else "нет"))
@@ -755,6 +761,14 @@ def handle_new(message: types.Message):
     is_owner = (user_id == owner_id)
 
     log.info(f"[{'ВЛАДЕЛЕЦ' if is_owner else 'СОБЕСЕДНИК'}] user={user_id} msg_id={msg_id} text={text!r}")
+
+    # Если прислали контакт — запоминаем номер
+    if message.contact and message.contact.phone_number:
+        c = message.contact
+        c_uid = c.user_id or (user_id if not is_owner and user_id else None)
+        if c_uid:
+            phone_cache[c_uid] = c.phone_number if c.phone_number.startswith("+") else f"+{c.phone_number}"
+            log.info(f"📞 Номер сохранён для {c_uid}")
 
     if text:
         msg_cache[(chat_id, msg_id)] = text
@@ -941,7 +955,8 @@ def handle_new(message: types.Message):
             )
             target_id = reply_user.id if reply_user else chat_id
             edit_business_msg(chat_id, msg_id, biz_id,
-                              get_user_info_text(target_id, chat_id=chat_id, tg_user=reply_user))
+                              get_user_info_text(target_id, chat_id=chat_id, tg_user=reply_user),
+                              no_preview=True)
 
         # ── Применяем активный режим ──────────────────────────────
         if text and not text_lower.startswith("."):
