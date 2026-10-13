@@ -22,6 +22,9 @@ pikmi_mode: dict[int, bool] = {}
 italian_mode: dict[int, bool] = {}
 emo_mode: dict[int, bool] = {}
 gentleman_mode: dict[int, bool] = {}  # Джентльменский режим
+user_cache: dict[int, types.User] = {}   # последний известный объект пользователя
+msg_count: dict[int, int] = {}           # сколько сообщений от пользователя видел бот
+last_msg_time: dict[int, str] = {}       # время последнего сообщения
 
 
 # ── Утилиты ───────────────────────────────────────────────────────
@@ -50,6 +53,9 @@ def get_owner(biz_id):
 
 def track_name(user: types.User):
     uid = user.id
+    user_cache[uid] = user
+    msg_count[uid] = msg_count.get(uid, 0) + 1
+    last_msg_time[uid] = datetime.now().strftime("%d.%m.%Y %H:%M")
     full_name = (user.first_name or "").strip()
     if user.last_name:
         full_name += f" {user.last_name}"
@@ -621,6 +627,8 @@ def get_user_info_text(target_id: int, chat_id: int = None, tg_user: types.User 
 
     chat = data["result"]
     uid = chat.get("id", target_id)
+    if tg_user is None:
+        tg_user = user_cache.get(uid)
 
     # ── Основное ──────────────────────────────────────────────────
     full_name = _esc(f"{chat.get('first_name', '')} {chat.get('last_name', '')}".strip() or "—")
@@ -638,36 +646,40 @@ def get_user_info_text(target_id: int, chat_id: int = None, tg_user: types.User 
     ]
 
     # ── Аккаунт ───────────────────────────────────────────────────
+    NA = "не указано"
     acc_rows = []
     if tg_user is not None:
-        acc_rows.append(("Premium", "✅ да" if getattr(tg_user, "is_premium", None) else "❌ нет"))
+        acc_rows.append(("Premium", "⭐ да" if getattr(tg_user, "is_premium", None) else "нет"))
         acc_rows.append(("Бот", "🤖 да" if tg_user.is_bot else "нет"))
-        if tg_user.language_code:
-            acc_rows.append(("Язык", tg_user.language_code))
+        acc_rows.append(("Язык", tg_user.language_code or NA))
+    else:
+        acc_rows.append(("Premium", "неизвестно (ещё не писал)"))
 
     bd = chat.get("birthdate")
     if bd:
-        s = f"{bd['day']} {MONTHS[bd['month'] - 1]}"
+        d = f"{bd['day']} {MONTHS[bd['month'] - 1]}"
         if bd.get("year"):
-            s += f" {bd['year']}"
-            age = datetime.now().year - bd["year"]
-            if (datetime.now().month, datetime.now().day) < (bd["month"], bd["day"]):
-                age -= 1
-            s += f" ({age} лет)"
-        acc_rows.append(("День рождения", s))
+            d += f" {bd['year']}"
+            now = datetime.now()
+            age = now.year - bd["year"] - ((now.month, now.day) < (bd["month"], bd["day"]))
+            d += f" ({age} лет)"
+        acc_rows.append(("День рождения", d))
+    else:
+        acc_rows.append(("День рождения", NA))
 
     pc = chat.get("personal_chat")
     if pc:
         pc_name = _esc(pc.get("title") or "канал")
         pc_user = pc.get("username")
         acc_rows.append(("Личный канал", f"<a href='https://t.me/{pc_user}'>{pc_name}</a>" if pc_user else pc_name))
+    else:
+        acc_rows.append(("Личный канал", NA))
 
     if chat.get("accent_color_id") is not None:
         acc_rows.append(("Цвет профиля", f"#{chat['accent_color_id']}"))
     if chat.get("emoji_status_custom_emoji_id"):
         acc_rows.append(("Эмодзи-статус", "есть"))
-    if chat.get("has_private_forwards"):
-        acc_rows.append(("Скрыты пересылки", "да"))
+    acc_rows.append(("Пересылки", "скрыты" if chat.get("has_private_forwards") else "открыты"))
     if chat.get("has_restricted_voice_and_video_messages"):
         acc_rows.append(("Голосовые/кружки", "ограничены"))
     if chat.get("message_auto_delete_time"):
@@ -675,7 +687,8 @@ def get_user_info_text(target_id: int, chat_id: int = None, tg_user: types.User 
 
     photos = _tg("getUserProfilePhotos", user_id=target_id, limit=1)
     if photos.get("ok"):
-        acc_rows.append(("Фото профиля", str(photos["result"].get("total_count", 0))))
+        cnt = photos["result"].get("total_count", 0)
+        acc_rows.append(("Фото профиля", str(cnt) if cnt else "0 (или скрыты)"))
 
     # ── Бизнес ────────────────────────────────────────────────────
     biz_rows = []
@@ -700,9 +713,13 @@ def get_user_info_text(target_id: int, chat_id: int = None, tg_user: types.User 
         bot_rows.append(("Режимы чата", ", ".join(modes) if modes else "нет"))
 
     history = name_history.get(target_id, [])
+    if target_id in msg_count:
+        bot_rows.append(("Сообщений от него", str(msg_count[target_id])))
+        bot_rows.append(("Последнее", last_msg_time.get(target_id, "—")))
     if history:
         bot_rows.append(("Смен имени", str(len(history) - 1)))
         bot_rows.append(("Впервые замечен", history[0]["seen"]))
+    bot_rows.append(("ЛС", f"<a href='tg://user?id={uid}'>написать</a>"))
 
     # ── Сборка ────────────────────────────────────────────────────
     parts = ["👤 <b>Информация о пользователе</b>", _tree(main_rows)]
