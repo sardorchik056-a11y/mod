@@ -20,10 +20,8 @@ from telebot import types
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 log = logging.getLogger(__name__)
 
-# Токен берём из переменной окружения BOT_TOKEN (в коде его хранить нельзя).
-TOKEN = os.getenv("BOT_TOKEN", "").strip()
-if not TOKEN:
-    sys.exit("❌ Не задан токен бота. Укажите его в переменной окружения BOT_TOKEN.")
+# Токен бота прописан прямо в коде. Вставьте свой токен от @BotFather между кавычками.
+TOKEN = "8712603440:AAF7bO-ED3SB_sZV1w2T3ZEnkAZ52iWqSJ8"
 
 # num_threads=8: пока одни обработчики ждут ответ от внешних сервисов,
 # остальные сообщения не зависают в очереди.
